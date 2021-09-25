@@ -19,8 +19,8 @@ func main(){
                 Timeout: time.Millisecond * time.Duration(6000),
             }
             return d.DialContext(ctx, network, "1.1.1.1:53")
-        },
-    }
+	},
+	}
 	
 	// Repeat the cycle
 	for{
