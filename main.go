@@ -3,10 +3,24 @@ package main
 import(
 	"fmt"
 	"net"
-	"os"
+	"context"
+	"time"
 )
 
 func main(){
+	
+	// Custom Public DNS resolver
+	// ** Bug in Go 1.17 & Windows platform (github golang #33097)
+	
+	dns := &net.Resolver{
+        PreferGo: true,
+        Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+            d := net.Dialer{
+                Timeout: time.Millisecond * time.Duration(6000),
+            }
+            return d.DialContext(ctx, network, "1.1.1.1:53")
+        },
+    }
 	
 	// Repeat the cycle
 	for{
@@ -20,7 +34,7 @@ func main(){
 		fmt.Printf("I Will test autodiscover for the domain: %s\n\n", host)
 		
 		// Check NS records
-		nIP, err := net.LookupNS(host)
+		nIP, err := dns.LookupNS(context.Background(), host)
 		if err != nil{
 			fmt.Println("\nThere are no Name Server records published, are you sure the domain exists? Try again, it might have been a typo.\n")
 			continue
@@ -36,7 +50,7 @@ func main(){
 		}
 		
 		// Check MX records 
-		mREC, err := net.LookupMX(host)
+		mREC, err := dns.LookupMX(context.Background(), host)
 		if err != nil {
 			fmt.Println("There is no mail records published. Why do you want autodiscover...\n")
 			fmt.Println("Press the Enter Key to terminate the console screen!")
@@ -53,7 +67,7 @@ func main(){
 			fmt.Print("\n")
 		}
 		// Check A records & Srv Record
-		aIP, err := net.LookupHost(hosturl)
+		aIP, err := dns.LookupHost(context.Background(), hosturl)
 		fmt.Print("------------------------\n")
 		fmt.Println("Certificate Check")
 		fmt.Print("------------------------\n\n")
@@ -64,7 +78,7 @@ func main(){
 			fmt.Sprintf("In case you have it in your certificate, I advice you to create the A record %s \n", hosturl)
 			fmt.Println("\nLet's see if there is a srv record, there shoud be one:")
 			// Check SRV Records
-			cname, sIP, err := net.LookupSRV("autodiscover", "tcp", host)
+			cname, sIP, err := dns.LookupSRV(context.Background(), "autodiscover", "tcp", host)
 			if err != nil{
 				fmt.Printf("NO SRV record found, %v.\n", err)
 				fmt.Printf("It seems nothing is configured... May I advice you to create an srv record _autodiscover._tcp.%s and point it to your target mailserver (with a valid certificate name).\n", host)
@@ -87,7 +101,7 @@ func main(){
 			} else {
 				// Check SRV records even with A record in place
 				for _, ip := range aIP{
-					_, sIP2, err := net.LookupSRV("autodiscover", "tcp", host)
+					_, sIP2, err := dns.LookupSRV(context.Background(), "autodiscover", "tcp", host)
 					if err != nil{
 						fmt.Printf("Is the name (%s) listed in the certificate, otherwise you will get autodiscover issues.\nIt points to this IP (WAN of the mailserver): %s\n", hosturl, ip)
 						fmt.Printf("This url should work without any certificate warnings: https://%v/owa\n", hosturl)
@@ -117,11 +131,10 @@ func main(){
 		var answ string
 		fmt.Scanln(&answ)
 		if answ != "y"{
-			os.Exit(0)
+			break
 		}
 		
 		fmt.Print("\n******************************************************\n")
 		fmt.Print("\n******************************************************\n")
 	}
 }
-
